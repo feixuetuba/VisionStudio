@@ -1,0 +1,5 @@
+{
+  "pkg": "layers.ImageLayer.ImageLayer",
+  "name": "image",
+  "supported": [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]
+}

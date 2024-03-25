@@ -1,0 +1,29 @@
+{
+  "init": [
+    "builtin.classify.Init"
+  ],
+  "listener":{
+    "item_changed":["builtin.classify.item_changed"]
+  },
+  "plugins":[{
+    "location": "文件",
+    "en": "new project",
+    "zh": "新建工程",
+    "func": "builtin.menu.new_project",
+    "shortcut": "ctrl+n"
+  },
+    {
+      "location": "文件",
+      "en": "new Layer",
+      "zh": "新建图层",
+      "func": "builtin.menu.new_layer",
+      "shortcut": "ctrl+l"
+    },
+    {
+    "location": "标注",
+    "en": "classify",
+    "zh": "分类",
+    "func": "builtin.classify.set_classes"
+  }
+]
+}

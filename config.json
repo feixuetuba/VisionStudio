@@ -1,0 +1,8 @@
+{
+  "language": "zh",
+  "window location": [50,50, 1024, 768],
+  "Plugins": [
+    "builtin/buildin.plugin.json",
+    "Plugins"
+  ]
+}
