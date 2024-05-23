@@ -70,6 +70,7 @@ class Multilayer(QtWidgets.QWidget):
             if not success:
                 return False, msg
         else:
+            layer_type = self.context.layer_pkg[layer_type]["pkg"]
             layer = load_instance(layer_type, **kwargs, parent=self)
             success, msg = layer.load_content(value)
         if not success:
@@ -174,7 +175,6 @@ class MultilayerViewer(QtWidgets.QWidget):
         spliter.setOrientation(QtCore.Qt.Horizontal)
         spliter.setSizes(QtCore.QIntList(100000, 100000))
 
-
         multi_viewer = Multilayer(parent=self, context=self.context)
         self.multi_viewer = multi_viewer
         spliter.addWidget(self.multi_viewer)
@@ -221,10 +221,10 @@ class MultilayerViewer(QtWidgets.QWidget):
             if len(selected) != 0:
                 selected.layer.states.operation = op
 
-    def add_layer(self, content, layerName=None, layerType=None):
+    def add_layer(self, content, layerName=None, layerType=None, **kwargs):
         idx = self.layer_items.rowCount()
         name = f"Layer{idx}" if layerName is None else layerName
-        success, layer = self.multi_viewer.add_layer(content, layerType)
+        success, layer = self.multi_viewer.add_layer(content, layerType, **kwargs)
         if not success:
             return success, layer
         item = LayerItem(name)
@@ -257,6 +257,23 @@ class MultilayerViewer(QtWidgets.QWidget):
             self.layer_items.item(next, 0).setCheckState(QtCore.Qt.Checked)
             self.layers_view.setCurrentIndex(self.layers_view.model().index(next, 0))
         return False
+
+    def layer_names(self):
+        n = self.layer_items.rowCount()
+        names = []
+        for i in range(n):
+            name = self.layer_items.item(i, 0).text()
+            names.append(name)
+        return  names
+
+    def get_layer(self, name):
+        n = self.layer_items.rowCount()
+        for i in range(n):
+            curr = self.layer_items.item(i, 0)
+            if name == curr.text():
+                return curr.layer
+        return None
+
     def wheelEvent(self, event):
         delta = event.angleDelta().y() / 120
         self.multi_viewer.zoom(delta)

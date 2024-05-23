@@ -151,7 +151,7 @@ class ClassifyWidget(QtWidgets.QWidget):
         info["classes"] = classes
 
 
-def Init(context):
+def Init(context, **kwargs):
     win = context.win
     widget = ClassifyWidget(parent=win.canvas, context=context)
     setattr(win, "classify_layer", widget)

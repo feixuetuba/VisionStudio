@@ -2,7 +2,7 @@ import os
 
 from PySide6 import QtWidgets, QtCore
 from PySide6 import QtGui
-from PySide6.QtCore import Qt, Signal, QAbstractTableModel
+from PySide6.QtCore import Qt, Signal, QAbstractTableModel, QItemSelectionModel
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QVBoxLayout, QFileIconProvider, QDialogButtonBox, QStyle, QHeaderView, QAbstractItemView
 
@@ -132,12 +132,12 @@ class OpenFileDialog(QtWidgets.QDialog):
                 ret.append(fpath)
             elif os.path.isfile(fpath) and "file" in self.accept_list:
                 ret.append(fpath)
-        if len(ret) == 0:
-            fpath = self.curr_path
-            if os.path.isdir(fpath) and "dir" in self.accept_list:
-                ret.append(fpath)
-            elif os.path.isfile(fpath) and "file" in self.accept_list:
-                ret.append(fpath)
+        # if len(ret) == 0:
+        #     fpath = self.curr_path
+        #     if os.path.isdir(fpath) and "dir" in self.accept_list:
+        #         ret.append(fpath)
+        #     elif os.path.isfile(fpath) and "file" in self.accept_list:
+        #         ret.append(fpath)
         self.selected_files = ret
         if self.acc_func is not None:
             self.acc_func(self.curr_path, layer_name)
@@ -177,10 +177,30 @@ class OpenFileDialog(QtWidgets.QDialog):
 
     def change_path(self):
         txt = self.path_edit.text()
+        txt = txt.replace('"', '').replace("file:///",'')
         if txt == self.curr_path:
             return
-        if os.path.isdir(txt):
+        if os.path.isdir(txt) and "dir" in self.accept_list:
             self.open_path(txt)
+        elif os.path.isfile(txt) and "file" in self.accept_list:
+            dir_path = os.path.dirname(txt)
+            self.open_path(dir_path)
+            self.path_edit.textChanged.connect(None)
+            self.path_edit.setText(os.path.dirname(txt))
+            file = os.path.basename(txt)
+            if not self.save_edit.isHidden():
+                self.save_edit.setText(file)
+            model = self.table_view.selectionModel()
+            for i in range(self.table_model.rowCount()):
+                if self.table_model.get_row_info(i)[1] == file:
+                    # self.table_view.scrollTo(self.table_model.index(i, 0))
+                    for c in range(self.table_model.columnCount()):
+                        index = self.table_model.index(i, c)
+                        model.select(index, QItemSelectionModel.Select)
+                    break
+            self.path_edit.textChanged.connect(self.change_path)
+
+
 
 
 def get_exist_file(parent=None,default_path="/", default_laye_name="", accepts=["dir", "file"], multi_ok=True):
@@ -188,14 +208,30 @@ def get_exist_file(parent=None,default_path="/", default_laye_name="", accepts=[
     d.save_label.hide()
     d.save_edit.hide()
     d.exec()
-    return d.selected_files, d.layer_edit.text()
+    ret = {
+        "selected": d.selected_files,
+        "directory": d.path_edit.text()
+    }
+    if not d.layer_edit.hide():
+        ret["layer"] = d.layer_edit.text()
+    if not d.save_edit.hide():
+        ret["filename"] = d.save_edit.text()
+    return ret
 
 def get_save_file(parent=None, default_path="/", default_laye_name="", accepts=["dir", "file"]):
     d = OpenFileDialog(parent=parent,entry=default_path, layer_name=default_laye_name, accepts=accepts, enable_multi=False)
     d.layer_edit.hide()
     d.layer_label.hide()
     d.exec()
-    return d.selected_files, d.layer_edit.text()
+    ret = {
+        "selected": d.selected_files,
+        "directory": d.path_edit.text()
+    }
+    if not d.layer_edit.hide():
+        ret["layer"] = d.layer_edit.text()
+    if not d.save_edit.hide():
+        ret["filename"] = d.save_edit.text()
+    return ret
 
 
 if __name__ == "__main__":
@@ -204,5 +240,5 @@ if __name__ == "__main__":
 
     app = QtWidgets.QApplication(sys.argv)
     win = QtWidgets.QMainWindow()
-    print(get_exist_file())
+
     app.exec()

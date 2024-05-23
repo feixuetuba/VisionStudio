@@ -1,0 +1,15 @@
+{
+  "init": {
+    "Plugins.AI.mmsegs.Init": {}
+  },
+  "listener":{
+
+  },
+  "plugins":[{
+    "location": "AI",
+    "en": "mmsegmentation",
+    "zh": "像素分割",
+    "func": "Plugins.AI.mmsegs.do_seg"
+  }
+]
+}

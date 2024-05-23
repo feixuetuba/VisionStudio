@@ -51,8 +51,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas = MultilayerViewer(parent=self, context=self.states)
         self.spliter.addWidget(self.canvas)
 
+        self.tool_dock = QtWidgets.QWidget()
+        self.spliter.addWidget(self.tool_dock)
+
         self.spliter.setStretchFactor(0, 2)
-        self.spliter.setStretchFactor(1, 8)
+        self.spliter.setStretchFactor(1, 9)
+        self.spliter.setStretchFactor(2, 2)
         self.setCentralWidget(self.spliter)
         self.curr_dir = None
 
@@ -62,9 +66,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         state = self.states.state
         if state.curr_item is not None:
-            idx = state.files.index(state.curr_item)
-            state.curr_item = None
-            self.files_view.setCurrentIndex(self.file_items.index(idx,0))
+            if state.curr_item not in state.files:
+                state.curr_item = None
+            else:
+                idx = state.files.index(state.curr_item)
+                state.curr_item = None
+                self.files_view.setCurrentIndex(self.file_items.index(idx,0))
         self.log("Ready", self.LOG_INFO)
 
     def __LoadConfig(self):
@@ -82,7 +89,7 @@ class MainWindow(QtWidgets.QMainWindow):
             elif os.path.isdir(plugin):
                 for f in os.listdir(plugin):
                     if f.endswith(".plugin.json"):
-                        self.__load_plugin_file(f"{plugin}/{f}", self.operations)
+                        self.__load_plugin_file(f"{plugin}/{f}", menu_map)
 
     def __load_plugin(self, pcfg, menu_map):
         strloc = pcfg["location"]
@@ -121,9 +128,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def __load_plugin_file(self, fpath, menu_map):
         with open(fpath, "r", encoding="utf-8") as fd:
             meta = json.load(fd)
-        for init_func in meta.get("init", []):
-            func = load_func(init_func)
-            func(self.states)
+        for func_name, params in meta.get("init", {}).items():
+            func = load_func(func_name)
+            func(self.states, **params)
         for event, listeners in meta.get("listener", {}).items():
             if event not in self.events_listeners:
                 self.log(f"No such event:{event}", self.LOG_WARN)
@@ -200,6 +207,7 @@ class MainWindow(QtWidgets.QMainWindow):
             project_file = self.__temp_project
         with open(project_file, "w") as fd:
             json.dump(self.states.state, fd, indent=4, ensure_ascii=False)
+        self.log(f"Save project to {self.states.project_file}", self.LOG_INFO)
 
     def load_project(self, fpath):
         try:
@@ -221,6 +229,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
         self.canvas.key_event(event)
         return True
+
 
 if __name__ == "__main__":
     import sys

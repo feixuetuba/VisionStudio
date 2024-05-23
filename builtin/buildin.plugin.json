@@ -1,7 +1,7 @@
 {
-  "init": [
-    "builtin.classify.Init"
-  ],
+  "init": {
+  "builtin.classify.Init": {}
+  },
   "listener":{
     "item_changed":["builtin.classify.item_changed"]
   },
@@ -10,6 +10,12 @@
     "en": "new project",
     "zh": "新建工程",
     "func": "builtin.menu.new_project",
+    "shortcut": "ctrl+n"
+  },{
+    "location": "文件",
+    "en": "open project",
+    "zh": "打开工程",
+    "func": "builtin.menu.open_project",
     "shortcut": "ctrl+n"
   },
     {

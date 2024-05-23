@@ -115,3 +115,6 @@ class Layer(QWidget):
         self.opts["source"] = source
         rect = QtCore.QRect(rect.x(), rect.y(), rect_w, rect_h)
         self.opts["show_rect"] = rect
+
+    def save(self, fpath):
+        raise NotImplemented()

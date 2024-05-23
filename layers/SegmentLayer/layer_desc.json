@@ -1,0 +1,5 @@
+{
+  "pkg": "layers.SegmentLayer.SegmentLayer",
+  "name": "segment",
+  "supported": [".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".seg"]
+}
