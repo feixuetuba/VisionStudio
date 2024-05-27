@@ -1,0 +1,6 @@
+[submodule "ThirdParty/CLIPCAP"]
+	path = ThirdParty/CLIPCAP
+	url = https://github.com/rmokady/CLIP_prefix_caption.git
+[submodule "ThirdParty/CLIP"]
+	path = ThirdParty/CLIP
+	url = https://github.com/openai/CLIP.git

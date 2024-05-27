@@ -174,7 +174,7 @@ def load_lora(pipeline, lora_path, lora_w):
 
 
 def _size(value=str):
-    return [int(_) for _ in value.lower().strip("x")]
+    return [int(_.strip()) for _ in value.lower().split("x")]
 
 class Param(dict):
     def __init__(self, params:str, **kwargs):
@@ -190,8 +190,8 @@ class Param(dict):
         else:
             return value
 
-def run_from_generate_data(pipeline, generate_data, device_name="cuda", torch_dtype=torch.float32):
-
+def run_from_generate_data(pipeline, generate_data, loras={}, vaes={}, device_name="cuda", torch_dtype=torch.float32, n_generate=1):
+    logging.debug(f"GenerateData:{generate_data}")
     if isinstance(generate_data, str):
         keys = ["prompt", "negative", "params"]
         data = {}
@@ -204,26 +204,35 @@ def run_from_generate_data(pipeline, generate_data, device_name="cuda", torch_dt
         generate_data = data
     pattern = re.compile("<lora:([\w|_]*:\d+\.*\d*)>")
     prompt = generate_data.get("prompt","").replace("Prompt: ", "")
-    loras = []
+    activates = pipeline.get_active_adapters()
+
+    names = []
+    alphas = []
     for lora in pattern.findall(prompt):
         name, alpha = lora.split(":")
-        alpha = float(alpha)
-        loras.append((name, alpha))
+        names.append(name)
+        alphas.append(float(alpha))
+    if len(names) > 0:
+        for name in names:
+            if name not in activates:
+                pipeline.load_lora_weights(loras[name]["path"], adapter_name=name)
+        pipeline.set_adapters(names, alphas)
+
+
     prompt = pattern.sub("", prompt).strip()
 
     neg_prompt = generate_data.get("negative","").replace("Negative prompt: ", "")
     params = Param(generate_data["params"])
 
-    steps = params.get("step", 30, int)
-    size = params.get("size", (512,512), _size)
-    seed = params.get("seed", -1, int)
-    model_id = params.get("model","models/stablediffussion/runwayml/stable-diffusion-v1-5", str)
+    steps = params.get("Steps", 30, int)
+    size = params.get("Size", (512,512), _size)
+    seed = params.get("Seed", -1, int)
     smapler = params.get("Sampler","DDPM 2M", str)
-    CFG_SCALE = params.get("CFG scale", 7, int)
+    CFG_SCALE = params.get("CFG scale", 7, float)
     clip_skip = params.get("Clip skip", 9, int)
     hires_steps = 0
     hires_upscale = 1.0
-    denoising_strength = 0
+    denoising_strength = params.get("Denoising strength",0, float)
     original_config_file = None
 
     if clip_skip > 1:
@@ -232,7 +241,10 @@ def run_from_generate_data(pipeline, generate_data, device_name="cuda", torch_dt
             pipeline.text_encoder.text_model.encoder.layers = clip_layers[:-clip_skip]
 
     scheduler = set_scheduler(pipeline, smapler)
-    generator = torch.Generator("cuda").manual_seed(seed)
+    if seed > 0:
+        generator = torch.Generator("cuda").manual_seed(seed)
+    else:
+        generator = None
     prompt_embeds, negative_prompt_embeds = get_prompt_embeddings(pipeline, prompt, neg_prompt, device=torch.device(device_name))
 
     if False: #hires_upscale > 1.0:
@@ -275,20 +287,12 @@ def run_from_generate_data(pipeline, generate_data, device_name="cuda", torch_dt
             generator=generator, num_inference_steps=steps,
             guidance_scale=CFG_SCALE,
             clip_skip=clip_skip,
-            strength=denoising_strength, use_safetensors=True
+            strength=denoising_strength, use_safetensors=True,
+                          num_images_per_prompt=n_generate
+
         ).images
     return images
 
 
-if __name__ == "__main__":
-    generate_data = """
-    overweight, (chubby:1.25), sweaty, woman sitting on a couch, surrounded by empty bags of chips and candy wrappers. She is wearing a stained t-shirt and sweatpants, and she looks content and relaxed, (best quality), (masterpiece:1.2), 4k ,(ultra detailed:1.2)
-    Negative prompt: (low quality:1.2), (worst quality:1.2), (bad anatomy), (deformed), disfigured, long neck, bad hands, poorly drawn face, watermark, text, poorly drawn hands, username, EasyNegative, bad-hands-5, bad_prompt_version2, lowres
-    Steps: 20, CFG scale: 7, Sampler: DPM++ 2M Karras, Seed: 4039756984, Clip skip: 2
-    """
-    # pipe = load_pipeline(r"E:\virtualmachine\shared\stablediffusion\majicmixRealistic-v7.safetensors",
-    pipe = load_pipeline(r"D:\codes\stable_diffussion_refernece\my_diffussion\models\stablediffussion\chilloutmix_Ni\chilloutmix_NiPrunedFp32Fix.safetensors",
-                         safety_check=False,
-                         varient="fp32")
-    images = run_from_generate_data(pipe, generate_data,)
-    images[0].save("./result.jpg")
+
+

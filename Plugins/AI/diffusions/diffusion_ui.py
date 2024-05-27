@@ -1,21 +1,24 @@
 import logging
 import os
-import numpy as np
-import torch
+import re
+
+import PySide6
+from PIL import Image
 import yaml
 from PySide6.QtWidgets import QDialogButtonBox
 from mmengine.model import revert_sync_batchnorm
 
+from Plugins.AI.diffusions.diffusers_util import load_pipeline, run_from_generate_data
 from mmseg.apis import init_model, inference_model
-from PySide6 import QtWidgets, QtCore
-import cv2
+from PySide6 import QtWidgets, QtCore, QtGui
 
 from utils.Config import Config
+from utils.qtuitools import list_commbo
 
 
 class Diffusion:
     def __init__(self, config_file=None):
-        my_dir = os.path.abspath(__file__)
+        my_dir = os.path.dirname(os.path.abspath(__file__))
         if config_file is None:
             config_file = f"{my_dir}/diffusion.yaml"
         self.cfg_file = config_file
@@ -24,11 +27,30 @@ class Diffusion:
             self.cfg = Config(cfg)
         if "base" not in self.cfg:
             self.cfg["base"] = {}
+        else:
+            for k, v in self.cfg.base.items():
+                v["path"] = self.abspath(v["path"])
+                if "cfg" in v:
+                    v[cfg] = self.abspath(v["cfg"])
+
         if "lora" not in self.cfg:
             self.cfg["lora"] = {}
-        if "TextureInversion" not in self.cfg:
-            self.cfg["TextureInversion"] = {}
-
+        else:
+            for k, v in self.cfg.lora.items():
+                v["path"] = self.abspath(v["path"])
+            print(self.cfg.lora)
+        if "TI" not in self.cfg:
+            self.cfg["TI"] = {}
+        else:
+            for k, v in self.cfg.TI.items():
+                v["path"] = self.abspath(v["path"])
+        if "vae" not in self.cfg:
+            self.cfg["vae"] = {}
+        else:
+            for k, v in self.cfg.vae.items():
+                v["path"] = self.abspath(v["path"])
+        if "hash" not in self.cfg:
+            self.cfg["hash"] = {}
     def save(self):
         with open(self.cfg_file, "w") as fd:
             yaml.dump(self.cfg, fd)
@@ -48,27 +70,138 @@ class Diffusion:
         if save:
             self.save()
 
-    def generate(self, info):
+    def abspath(self, model_id):
+        mdir = os.path.dirname(os.path.abspath(__file__))
+        fullp = f"{mdir}/{model_id}"
+        if os.path.isfile(fullp) or os.path.isdir(fullp):
+            return fullp
+        return model_id
+    def generate(self, info, n_generate=1):
+        minfo = self.cfg.base[info["model"]]
+        model_id = minfo['path']
+        self.pipeline = load_pipeline(model_id, False, minfo.get("varitent", "fp32"), original_config_file=minfo.get("cfg",None))
+
+        return  run_from_generate_data(self.pipeline, info["generate_data"],
+            loras = self.cfg.lora,
+            vaes = self.cfg.vae,
+            n_generate=n_generate)
 
 
-class SegDialog(QtWidgets.QDialog):
-    def __init__(self, context, parent=None):
+class SDDialog(QtWidgets.QDialog):
+    def __init__(self, context=None, parent=None):
         super().__init__(parent=parent)
-        self.setWindowTitle("MMsegmentations")
-        layers = [""]
-        layers.extend(context.win.canvas.layer_names())
+        self.setWindowTitle("StableDiffusion")
+        # layers = [""]
+        # layers.extend(context.win.canvas.layer_names())
         layout = QtWidgets.QFormLayout()
-        self.layers_comb = QtWidgets.QComboBox(self)
-        self.layers_comb.addItems(layers)
-        layout.addRow("layers",self.layers_comb)
-        if len(layers) >= 2:
-            self.layers_comb.setCurrentIndex(1)
-
-        self.methods_comb = QtWidgets.QComboBox(parent=self)
-        methods = context.win.mmsegs.get_methods()
-        self.methods_comb.addItems(methods)
-        layout.addRow("method", self.methods_comb)
+        # self.layers_comb = QtWidgets.QComboBox(self)
+        # self.layers_comb.addItems(layers)
+        # layout.addRow("layers",self.layers_comb)
+        # if len(layers) >= 2:
+        #     self.layers_comb.setCurrentIndex(1)
+        self.diffusion = Diffusion()
         self.setLayout(layout)
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("基模"))
+        self.base = QtWidgets.QComboBox(parent=self)
+        self.base.addItems(list(self.diffusion.cfg.base.keys()))
+        h_layout.addWidget(self.base)
+        self.load_btn = QtWidgets.QPushButton("加载配置")
+        self.load_btn.clicked.connect(self.open_file)
+        h_layout.addWidget(self.load_btn)
+        layout.addRow(h_layout)
+
+        self.prompt = QtWidgets.QTextEdit(parent=self)
+        layout.addRow("prompt", self.prompt)
+        self.nprompt = QtWidgets.QTextEdit(parent=self)
+        layout.addRow("negative", self.nprompt)
+
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("CFG scale:"))
+        self.cfg_scale = QtWidgets.QLineEdit(parent=self)
+        h_layout.addWidget(self.cfg_scale)
+        h_layout.addWidget(QtWidgets.QLabel("Size:"))
+        self.g_width = QtWidgets.QLineEdit(parent=self)
+        self.g_width.setValidator(QtGui.QIntValidator())
+        self.g_height = QtWidgets.QLineEdit(parent=self)
+        self.g_height.setValidator(QtGui.QIntValidator())
+        h_layout.addWidget(self.g_width)
+        h_layout.addWidget(QtWidgets.QLabel("X"))
+        h_layout.addWidget(self.g_height)
+        layout.addRow(h_layout)
+
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("Clip skip"))
+        self.clip_skip = QtWidgets.QLineEdit(parent=self)
+        self.clip_skip.setValidator(QtGui.QIntValidator())
+        h_layout.addWidget(self.clip_skip)
+        h_layout.addWidget(QtWidgets.QLabel("Seed:"))
+        self.seed = QtWidgets.QLineEdit(parent=self)
+        self.seed.setValidator(QtGui.QIntValidator())
+        h_layout.addWidget(self.seed)
+        layout.addRow(h_layout)
+
+        samplers = ["DDPM", "DPM++ 2M", "DPM++ 2M SDE", "DPM++ 2M SDE Karras",
+                    "DPM++ SDE", "DPM++ SDE Karras",
+                    "DPM2", "DPM2 a", "DPM2 Karras", "DPM2 a Karras",
+                    "Euler", "Euler a",
+                    "heun", "lms", "lms Karras"
+                    ]
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("Sampler:"))
+        self.sampler = QtWidgets.QComboBox(parent=self)
+        self.sampler.addItems(samplers)
+        h_layout.addWidget(self.sampler)
+        h_layout.addWidget(QtWidgets.QLabel("Denoising strength:"))
+        self.denoise_strength = QtWidgets.QLineEdit(parent=self)
+        self.denoise_strength.setText("0")
+        self.denoise_strength.setValidator(QtGui.QDoubleValidator())
+        h_layout.addWidget(self.denoise_strength)
+        layout.addRow(h_layout)
+
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("VAE"))
+        self.vae = QtWidgets.QComboBox(parent=self)
+        vaes = [""]
+        vaes.extend(list(self.diffusion.cfg.vae.keys()))
+        self.vae.addItems(vaes)
+        h_layout.addWidget(self.vae)
+        h_layout.addWidget(QtWidgets.QLabel("Texture inversion"))
+        self.TI = QtWidgets.QComboBox(parent=self)
+        tis = [""]
+        tis.extend(list(self.diffusion.cfg.TI.keys()))
+        self.TI.addItems(tis)
+        h_layout.addWidget(self.TI)
+        layout.addRow(h_layout)
+
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.addWidget(QtWidgets.QLabel("Steps"))
+        self.steps = QtWidgets.QLineEdit(parent=self)
+        self.steps.setValidator(QtGui.QIntValidator())
+        h_layout.addWidget(self.steps)
+        h_layout.addWidget(QtWidgets.QLabel("Num"))
+        self.n_generate = QtWidgets.QLineEdit(parent=self)
+        self.n_generate.setText("1")
+        self.n_generate.setValidator(QtGui.QIntValidator())
+        h_layout.addWidget(self.n_generate)
+        layout.addRow(h_layout)
+
+        self.lora_widgets = []
+        loras = [""]
+        loras.extend(list(self.diffusion.cfg.lora.keys()))
+        self.max_loras = 5
+        for i in range(self.max_loras):
+            h_layout = QtWidgets.QHBoxLayout()
+            h_layout.addWidget(QtWidgets.QLabel("LORA:"))
+            lora = QtWidgets.QComboBox(parent=self)
+            lora.addItems(loras)
+            h_layout.addWidget(lora)
+            h_layout.addWidget(QtWidgets.QLabel("wieght:"))
+            weight = QtWidgets.QLineEdit(parent=self)
+            weight.setValidator(QtGui.QDoubleValidator())
+            h_layout.addWidget(weight)
+            self.lora_widgets.append((lora, weight))
+            layout.addRow(h_layout)
 
         QBtn = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         '''创建对话框按钮'''
@@ -79,18 +212,138 @@ class SegDialog(QtWidgets.QDialog):
         self.buttonBox.rejected.connect(self.reject)
         self.layout().addWidget(self.buttonBox)
 
-    def add_btn_box(self, layout):
-        self.ok_btn = QtWidgets.QPushButton("确定")
-        self.cancel_btn = QtWidgets.QPushButton("取消")
-        w = QtWidgets.QWidget()
-        l = QtWidgets.QHBoxLayout()
-        l.addWidget(self.ok_btn)
-        l.addWidget(self.cancel_btn)
-        w.setLayout(l)
-        layout.addWidget(w)
-        self.ok_btn.clicked.connect(self.access)
-        self.cancel_btn.clicked.connect(self.cancel)
+        self.generate_data = ""
 
+    def accept(self) -> None:
+        info = self.build_generate_data()
+        ng = int(self.n_generate.text().strip())
+        for i, image in enumerate(self.diffusion.generate(info, ng)):
+            image.save(f"{i}.png")
+
+    def build_generate_data(self):
+        model = self.base.currentText().strip()
+        info = {"model":model}
+        #Hires steps: 16, Hires upscale: 1.5, Hires upscaler: Latent, Denoising strength: 0.5
+        params = [f"Steps: {self.steps.text().strip()}"]
+        params.append(f"Size: {self.g_width.text().strip()}x{self.g_height.text().strip()}")
+        params.append(f"Seed: {self.seed.text().strip()}")
+        params.append(f"Model: {model}")
+        params.append(f"Sampler: {self.sampler.currentText().strip()}")
+        params.append(f"CFG scale: {self.cfg_scale.text().strip()}")
+        params.append(f"Clip skip: {self.clip_skip.text().strip()}")
+        for k,v in self.diffusion.cfg.hash.items():
+            if v == model:
+                params.append(f"Model hash: {k}")
+                break
+        params.append(f"Denoising strength: {self.denoise_strength.text().strip()}")
+        params = ", ".join(params)
+        loras = []
+        for i in range(self.max_loras):
+            lora, weight = self.lora_widgets[i]
+            w = weight.text()
+            if len(w) ==0 or float(w) <= 0:
+                continue
+            loras.append(f"<lora:{lora.currentText().strip()}:{w}>")
+        prompt = self.prompt.toPlainText().strip()
+        if len(loras) != 0:
+            loras = ", ".join(loras)
+            prompt = ", ".join([prompt, loras])
+        info["generate_data"] = "\n".join([prompt,
+                                           "Negative prompt: "+self.nprompt.toPlainText().strip(),
+                                           params])
+        self.generate_data = info["generate_data"]
+        return info
+
+    def dropEvent(self, event: PySide6.QtGui.QDropEvent) -> None:
+        if event.mimeData().hasUrls():
+            filepath = event.mimeData().urls()[0].toLocalFile()
+            self.load_generate_data(filepath)
+
+    def open_file(self):
+        file = QtWidgets.QFileDialog.getOpenFileName(parent=self)
+        if file is None:
+            return
+        fpath = file[0]
+        self.load_generate_data(fpath)
+
+    def load_generate_data(self, fpath):
+        """
+        加载civitai的generate data
+        :return:
+        """
+
+        if fpath.endswith(".png"):
+            image = Image.open(fpath)
+            if hasattr("generate_data"):
+                lines = image.generate_data.split("\n")
+        else:
+            with open(fpath) as fd:
+                lines = fd.readlines()
+
+        pattern = re.compile("<lora:([\w|_]*:\d+\.*\d*)>")
+        prompt = lines[0].strip()
+        loras = pattern.findall(prompt)
+        prompt = pattern.sub("", prompt)
+        self.prompt.setText(prompt)
+        self.nprompt.setText(lines[1].strip())
+        self.params = lines[2].strip()
+
+        if len(self.lora_widgets) > 0:
+            commbo = self.lora_widgets[0][0]
+            c_loras = list_commbo(commbo)
+            idx = 0
+            for lora in loras:
+                name, alpha = lora.split(":")
+                if name not in c_loras:
+                    logging.error(f"Missing Lora: {name}")
+                    continue
+                self.lora_widgets[idx][0].setCurrentIndex(c_loras.index(name))
+                self.lora_widgets[idx][1].setText(alpha)
+                idx += 1
+        model_found = (True, "")
+        for p in self.params.split(","):
+            name, value = p.strip().split(":")
+            value = value.strip()
+            name = name.lower()
+            if name == "cfg scale":
+                self.cfg_scale.setText(value)
+            elif name == "steps":
+                self.steps.setText(value)
+            elif name == "size":
+                w,h = value.lower().split("x")
+                self.g_width.setText(w)
+                self.g_height.setText(h)
+            elif name == "seed":
+                self.seed.setText(value)
+            elif name == "model":
+                c_base = list_commbo(self.base)
+                if value not in c_base:
+                    model_found= (False, value)
+                else:
+                    idx = c_base.index(value)
+                    self.base.setCurrentIndex(idx)
+            elif name == "sampler":
+                c_sampler = list_commbo(self.sampler)
+                if value not in c_sampler:
+                    logging.error(f"Unknow Sampler model:{value}")
+                else:
+                    idx = c_sampler.index(value)
+                    self.sampler.setCurrentIndex(idx)
+            elif name == "clip skip":
+                self.clip_skip.setText(value)
+            elif name == "denoising strength":
+                self.denoise_strength.setText(value)
+            elif name == "model hash":
+                if value in self.diffusion.cfg.hash:
+                    value = self.diffusion.cfg.hash[value]
+                    c_base = list_commbo(self.base)
+                    idx = c_base.index(value)
+                    self.base.setCurrentIndex(idx)
+                    model_found = (True, value)
+            else:
+                logging.warning(f"Unknow params {p.strip()}")
+        if not model_found[0]:
+            logging.error(f"Base model:", model_found[1], "no found")
 
 
 def Init(context, **kwargs):
@@ -143,20 +396,25 @@ def do_seg(context):
 
 if __name__ == "__main__":
     import cv2
+    import sys
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    app = QtWidgets.QApplication(sys.argv)
     from mmseg.apis import show_result_pyplot
-    mmseg = MMSegments()
-    mmseg.use("tattoo")
-    img_file = r"4b6bd4e955718.jpg"
-    img = cv2.imread(img_file)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = mmseg.run(img, data_only=True)
+    sd = SDDialog()
+    sd.show()
+    app.exec()
+    # img_file = r"4b6bd4e955718.jpg"
+    # img = cv2.imread(img_file)
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # result = mmseg.run(img, data_only=True)
     # show_result_pyplot(
     #     mmseg.curr_model[0], img_file,result,draw_gt=False, draw_pred=True
     # )
     # print(type(result), result.shape)
     # print(type(mmseg.get_classes()))
-    palette = mmseg.get_palette()
-    cr = np.zeros_like(img, dtype=np.uint8)
-    for i, color in enumerate(palette):
-        cr[result == i] = color
-    cv2.imwrite("CCC.jpg", cr)
+    # palette = mmseg.get_palette()
+    # cr = np.zeros_like(img, dtype=np.uint8)
+    # for i, color in enumerate(palette):
+    #     cr[result == i] = color
+    # cv2.imwrite("CCC.jpg", cr)

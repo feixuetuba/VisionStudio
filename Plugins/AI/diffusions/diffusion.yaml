@@ -1,0 +1,77 @@
+hash:
+  a83e25fe5b: Guofeng3_v34
+  7C819B6D13: majicmixRealistic-v7
+  FC2511737A: chilloutmix_NiPrunedFp32Fix
+  00483A2A78: koreandolllikeness
+  FF1EDE49E6: ChineseDollLikeness2.0
+
+base:
+  majicmixRealistic-v7:
+    path: models/base/majicmixRealistic-v7.safetensors
+    cfg: configs/v1-inference.yaml
+    varient: fp32
+  chilloutmix_NiPrunedFp32Fix:
+    path: models/base/chilloutmix_NiPrunedFp32Fix.safetensors
+    cfg: configs/v1-inference.yaml
+    varient: fp32
+  Guofeng3_v34:
+    path: models/base/Guofeng3_v34
+    cfg: configs/v1-inference.yaml
+    varient: fp32
+  SD1.5:
+    path: models/base/runwayml/stable-diffusion-v1-5
+    cfg: configs/v1-inference.yaml
+    varient: fp32
+
+lora:
+  badbroirezumi3:
+    path: models/lora/badbroirezumi3.safetensors
+    keywords: TATTOO,IREZUMU
+    url: https://civitai.com/models/70382/badbro-irezumi-tattoo
+    comment: it works well in 640*768 full body shot
+    base: SD1.5
+  badbrounderwear:
+    path: models/lora/badbrounderwear.safetensors
+    keywords: FISHNETS, LINGERIE, SEE-THROUGH, BODYSUIT, PANTYHOSE, BARE SHOULDERS, HALTER NECK
+    url: https://civitai.com/models/71970/badbro-sexy-underwear
+    base: SD1.5
+    comment: weight 0.4
+  badbromaxidress:
+    path: models/lora/badbromaxidress.safetensors
+    keywords: MXDRESS,DRESS,WHITE DRESS,BLACK DRESS
+    base: SD1.5
+    url: https://civitai.com/models/73026/badbro-maxidress
+  japaneseDollLikeness_v10:
+    path: models/lora/japaneseDollLikeness_v10.safetensors
+    keywords: ""
+    base: SD1.5
+    url: https://civitai.com/models/28811/japanesedolllikeness-v15
+  japaneseDollLikeness_v15:
+    path: models/lora/japaneseDollLikeness_v15.safetensors
+    keywords: ""
+    base: SD1.5
+    url: https://civitai.com/models/28811/japanesedolllikeness-v15
+  koreandolllikeness_v10:
+    path: models/lora/koreandolllikeness_v10.safetensors
+    keywords: ""
+    base: SD1.5
+    url: https://civitai.com/models/26124/koreandolllikeness-v10
+  koreanDollLikeness:
+    path: models/lora/koreandolllikeness.safetensors
+    keywords: ""
+    base: SD1.5
+    url: https://civitai.com/models/26124/koreandolllikeness-v20
+  yaeMikoRealistic_yaemikoMixed:
+    path: models/lora/yaeMikoRealistic_yaemikoMixed.safetensors
+    keywords: ""
+    base: SD1.5
+    url: ""
+  ChineseDollLikeness2.0:
+    path: models/lora/ChineseDollLikeness2.0.safetensors
+    keywords: ""
+    base: others
+    url: https://civitai.com/models/9434/lora-chinese-doll-likeness
+
+vae:
+  vae-ft-mse-840000-ema-pruned:
+    path: models/vae/vae-ft-mse-840000-ema-pruned.ckpt
