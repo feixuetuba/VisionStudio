@@ -59,9 +59,10 @@ class Layer(QWidget):
         return None, "No implement"
 
     def move(self, dx, dy):
-        self.scroll(dx, dy)
-        # self.states.source[0] += dx
-        # self.states.source[1] += dy
+        self.states["transpose"] = [dx, dy]
+        # self.scroll(dx, dy)
+        self.states.source[0] -= dx
+        self.states.source[1] -= dy
 
     def zoom(self, x, y, dscale):
         rect = self.rect()
@@ -92,7 +93,7 @@ class Layer(QWidget):
         if rect_h < rect.height():
             t = (rect.height() - rect_h) * 0.5
         # t = (rect.height() - rh) * 0.5
-        p.translate(l, t)
+        # p.translate(l, t)
 
         wscale = source.width() / rect_w
         hscale = source.height() / rect_h

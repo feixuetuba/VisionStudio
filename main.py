@@ -1,6 +1,7 @@
 import json
 import logging
 import os.path
+import traceback
 from collections import OrderedDict
 from functools import partial
 
@@ -148,7 +149,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 continue
             with open(cfg_f, "r", encoding="utf-8") as fd:
                 cfg = json.loads(fd.read())
-                layer_pkg[cfg["name"]] = {"pkg": cfg["pkg"], "supported": cfg["supported"]}
+                for layer in cfg:
+                    layer_pkg[layer["name"]] = {"pkg": layer["pkg"], "supported": layer["supported"]}
         self.states = Config({
             "win": self,
             "state": {
@@ -183,8 +185,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.canvas.clean()
         curr = state.file_map[state.curr_item]
-        for layer, fpath in curr.layers.items():
-            self.canvas.add_layer(fpath,layer)
+        for layer, info in curr.layers.items():
+            ltype = info.get("type", None)
+            try:
+                layer = self.canvas.add_layer(info["path"],layer, ltype)
+                if ltype is None:
+                    info["type"] = layer.type()
+            except Exception as e:
+                traceback.print_exc()
 
     def log(self, msg, level ,timeout=-1):
         level = ["VISIT","DEBUG","INFO","WAR","ERROR","FATAL"][level]

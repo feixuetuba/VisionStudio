@@ -1,6 +1,7 @@
 import logging
 import os.path
 import re
+import traceback
 
 import diffusers
 import torch
@@ -9,7 +10,7 @@ import torch
 import torch
 from diffusers import DDPMScheduler, DPMSolverMultistepScheduler, DPMSolverSinglestepScheduler, \
     KDPM2AncestralDiscreteScheduler, KDPM2DiscreteScheduler, EulerDiscreteScheduler, EulerAncestralDiscreteScheduler, \
-    HeunDiscreteScheduler, LMSDiscreteScheduler
+    HeunDiscreteScheduler, LMSDiscreteScheduler, DDIMScheduler
 
 
 def get_prompt_embeddings(
@@ -27,8 +28,6 @@ def get_prompt_embeddings(
 
     # If prompt is longer than negative prompt.
     if count_prompt >= count_negative_prompt:
-        print("prompt", prompt)
-        print("negative_prompt", negative_prompt)
         input_ids = pipe.tokenizer(
             prompt, return_tensors = "pt", truncation = False,
             padding = "max_length",
@@ -44,8 +43,6 @@ def get_prompt_embeddings(
 
     # If negative prompt is longer than prompt.
     else:
-        print("negative_prompt", negative_prompt)
-        print("prompt", prompt)
         negative_ids = pipe.tokenizer(
             negative_prompt, return_tensors = "pt", truncation = False,
             padding = "max_length",
@@ -116,6 +113,8 @@ def set_scheduler(stage, scheduler_name):
         name = name.replace("2s a", "2m")
     if name == 'ddpm':
         scheduler = DDPMScheduler.from_config(stage.scheduler.config)
+    elif name == "ddim":
+        scheduler = DDIMScheduler.from_config(stage.scheduler.config)
     elif "dpm++ 2m" in name:
         scheduler = DPMSolverMultistepScheduler.from_config(stage.scheduler.config) #DPM++ 2M
         if "sde" in name:
@@ -215,7 +214,11 @@ def run_from_generate_data(pipeline, generate_data, loras={}, vaes={}, device_na
     if len(names) > 0:
         for name in names:
             if name not in activates:
-                pipeline.load_lora_weights(loras[name]["path"], adapter_name=name)
+                try:
+                    pipeline.load_lora_weights(loras[name]["path"], adapter_name=name)
+                except Exception as e:
+                    print(f'Load {loras[name]["path"]} failed!!!')
+                    traceback.print_exc()
         pipeline.set_adapters(names, alphas)
 
 
@@ -296,3 +299,16 @@ def run_from_generate_data(pipeline, generate_data, loras={}, vaes={}, device_na
 
 
 
+if __name__ == "__main__":
+    generate_data = """
+    overweight, (chubby:1.25), sweaty, woman sitting on a couch, surrounded by empty bags of chips and candy wrappers. She is wearing a stained t-shirt and sweatpants, and she looks content and relaxed, (best quality), (masterpiece:1.2), 4k ,(ultra detailed:1.2)
+    Negative prompt: (low quality:1.2), (worst quality:1.2), (bad anatomy), (deformed), disfigured, long neck, bad hands, poorly drawn face, watermark, text, poorly drawn hands, username, EasyNegative, bad-hands-5, bad_prompt_version2, lowres
+    Steps: 20, CFG scale: 7, Sampler: DPM++ 2M Karras, Seed: 4039756984, Clip skip: 2
+    """
+    # pipe = load_pipeline(r"E:\virtualmachine\shared\stablediffusion\majicmixRealistic-v7.safetensors",
+    pipe = load_pipeline(r"D:\codes\VisionStudio\Plugins\AI\diffusions/models/base/Guofeng3_v34",
+                         safety_check=False,
+                         varient="fp32")
+    pipe.load_lora_weights(r"D:\codes\VisionStudio\Plugins\AI\diffusions/models/lora/japaneseDollLikeness_v10.safetensors")
+    images = run_from_generate_data(pipe, generate_data,)
+    images[0].save("./result.jpg")

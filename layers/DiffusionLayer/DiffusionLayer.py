@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from PIL.Image import Image
+from PIL import Image
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtGui import QImage, QCursor, QPixmap, QIcon
 
@@ -8,23 +8,25 @@ from layers.Layer import Layer
 from utils.image import resize2
 
 
-class ImageLayer(Layer):
+class DiffusionLayer(Layer):
     def __init__(self, parent=None, contenxt=None, **kwargs):
         self.image = None
-        super(ImageLayer, self).__init__(parent=parent, context=contenxt)
+        super(DiffusionLayer, self).__init__(parent=parent, context=contenxt)
         self.setWindowOpacity(1.0)
 
     def type(self):
-        return "image"
-    def load_content(self, content, **kwargs):
+        return "sd"
+
+    def load_content(self, content, generate_data="", **kwargs):
         if isinstance(content, str):
-            raw = cv2.imread(content, cv2.IMREAD_UNCHANGED)
-            if raw is None:
-                return False, f"Load img:{content} failed"
-        elif isinstance(Image):
+            image = Image.open(content)
+            if "generate_data" in image.text:
+                self.generate_data = image.text["generate_data"]
+            raw = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        elif isinstance(content, Image.Image):
             raw = cv2.cvtColor(np.array(content), cv2.COLOR_RGB2BGR)
-        else:
-            raw = content
+        if len(generate_data) != 0:
+            self.generate_data = generate_data
         h, w = raw.shape[:2]
         self.raw = raw
         self.states.source = [0, 0, w, h]
@@ -60,11 +62,11 @@ class ImageLayer(Layer):
             _h = w * ar
         else:
             _w = h / ar
-
-        # dx = self.states.transpose[0] * 10
-        # dy = self.states.transpose[1] * 10
+        dx = (w - _w) * 0.5 + self.states.transpose[0]
+        dy = (h - _h) * 0.5 + self.states.transpose[0]
 
         p = QtGui.QPainter(self)
+        p.translate(dx, dy)
         p.drawImage(QtCore.QRect(rect.x(), rect.y(), int(_w), int(_h)), self.image, QtCore.QRect(*self.states.source))
         p.end()
 

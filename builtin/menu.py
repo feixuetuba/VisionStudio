@@ -55,7 +55,8 @@ def new_layer(context):
     win = context.win
     layers = context.state.layers
     n_layer = len(layers)
-    info = OpenFileDialog.get_exist_file(win,"/", f"layer_{n_layer + 1}", multi_ok=False)
+    info = OpenFileDialog.get_exist_file(win,"/", f"layer_{n_layer + 1}", multi_ok=False,
+                                        layer_types=list(context.layer_pkg.keys()))
 
     layer_name = info["layer"]
     directory = info["directory"]
@@ -79,7 +80,7 @@ def new_layer(context):
             if fname not in files:
                 refresh_list = True
                 file_map[fname] = {"layers": OrderedDict(), "label": "normal"}
-            file_map[fname]["layers"][layer_name] = os.path.join(path, f)
+            file_map[fname]["layers"][layer_name] = {"path":os.path.join(path, f), "type":info.get("layer_type", None)}
             files.append(fname)
 
     elif os.path.isfile(path):
@@ -92,7 +93,7 @@ def new_layer(context):
             curr = fname
             state["curr_item"] = curr
         file_info = file_map[curr]
-        file_info.layers[layer_name] = path
+        file_info.layers[layer_name] = {"path":path, "type":info.get("layer_type", None)}
 
     layers.append(layer_name)
     if refresh_list:

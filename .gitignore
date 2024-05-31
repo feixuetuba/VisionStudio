@@ -2,5 +2,4 @@
 images/
 *.pyc
 .temp.project
-ThirdParty/
-/ThirdParty/mmsegmentation/
+ThirdParty/*.*

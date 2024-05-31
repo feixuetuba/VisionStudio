@@ -1,7 +1,7 @@
 [
   {
-    "pkg": "layers.ImageLayer.ImageLayer",
-    "name": "image",
+    "pkg": "layers.DiffusionLayer.DiffusionLayer",
+    "name": "sd",
     "supported": [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]
   }
 ]

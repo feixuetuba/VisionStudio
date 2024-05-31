@@ -14,11 +14,11 @@ class FileTable(QAbstractTableModel):
         self.set_files(files)
         self.headers = ["名称","大小","修改日期"]
 
-
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
             return self.headers[section]
         return super().headerData(section, orientation, role)
+
     @classmethod
     def get_file_info(self, fpath):
         file_info = QtCore.QFileInfo(fpath)
@@ -87,6 +87,11 @@ class OpenFileDialog(QtWidgets.QDialog):
         self.layer_edit = QtWidgets.QLineEdit(parent=self)
         self.layer_edit.setText(layer_name)
         layout.addWidget(self.layer_edit, 0, layout.columnCount(), 1, 3)
+
+        self.layer_type_label = QtWidgets.QLabel("图层类型：", parent=self)
+        layout.addWidget(self.layer_type_label, 0, layout.columnCount(), 1, 1)
+        self.layer_type_combo = QtWidgets.QComboBox(parent=self)
+        layout.addWidget(self.layer_type_combo, 0, layout.columnCount(), 1, 3)
 
         self.table_model = FileTable(parent=self)
         self.table_view = QtWidgets.QTableView()
@@ -203,10 +208,18 @@ class OpenFileDialog(QtWidgets.QDialog):
 
 
 
-def get_exist_file(parent=None,default_path="/", default_laye_name="", accepts=["dir", "file"], multi_ok=True):
+def get_exist_file(parent=None,default_path="/",
+                   default_laye_name="",
+                   accepts=["dir", "file"],
+                   multi_ok=True,
+                   layer_types=[]):
     d = OpenFileDialog(parent=parent,entry=default_path,  layer_name=default_laye_name, accepts=accepts,enable_multi=multi_ok)
     d.save_label.hide()
     d.save_edit.hide()
+    if len(layer_types) == 0:
+        d.layer_type_combo.hide()
+    else:
+        d.layer_type_combo.addItems(layer_types)
     d.exec()
     ret = {
         "selected": d.selected_files,
@@ -216,6 +229,8 @@ def get_exist_file(parent=None,default_path="/", default_laye_name="", accepts=[
         ret["layer"] = d.layer_edit.text()
     if not d.save_edit.hide():
         ret["filename"] = d.save_edit.text()
+    if not d.layer_type_combo.hide():
+        ret["layer_type"] = d.layer_type_combo.currentText()
     return ret
 
 def get_save_file(parent=None, default_path="/", default_laye_name="", accepts=["dir", "file"]):

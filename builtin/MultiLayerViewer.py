@@ -153,9 +153,13 @@ class Multilayer(QtWidgets.QWidget):
         self.scroll(scroll_x, scroll_y)
 
     def move(self, dx, dy):
-        x,y = self.states.scroll
-        self.states.scroll = [dx+x, dy+y]
-        self.scroll(dx, dy)
+        for layer in self.layers:
+            if layer.isVisible():
+                layer.move(dx, dy)
+                layer.update()
+        # x,y = self.states.scroll
+        # self.states.scroll = [dx+x, dy+y]
+        # self.scroll(dx, dy)
 
 class MultilayerViewer(QtWidgets.QWidget):
     def __init__(self, context: Config, parent=None):
@@ -190,6 +194,7 @@ class MultilayerViewer(QtWidgets.QWidget):
         # layers_view.model().itemChanged.connect(
         #     lambda x: x.layer.show() if x.checkState() == QtCore.Qt.Checked else x.layer.hide())
         layers_view.model().itemChanged.connect(self.switch_layer_visible)
+
 
         self.layers_view = layers_view
         v_spliter.addWidget(layers_view)
@@ -256,6 +261,7 @@ class MultilayerViewer(QtWidgets.QWidget):
                     self.layer_items.item(i, 0).setCheckState(QtCore.Qt.Unchecked)
             self.layer_items.item(next, 0).setCheckState(QtCore.Qt.Checked)
             self.layers_view.setCurrentIndex(self.layers_view.model().index(next, 0))
+
         return False
 
     def layer_names(self):

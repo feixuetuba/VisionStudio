@@ -4,6 +4,10 @@ hash:
   FC2511737A: chilloutmix_NiPrunedFp32Fix
   00483A2A78: koreandolllikeness
   FF1EDE49E6: ChineseDollLikeness2.0
+  967E45E411: sexy_Hanfu_91
+  FA49E90E10: 96_xiu
+  E95C682BB7: Chinese_trendy_underwear
+  4185A2AF76: lo_dress_classic_style4_v1
 
 base:
   majicmixRealistic-v7:
@@ -16,6 +20,10 @@ base:
     varient: fp32
   Guofeng3_v34:
     path: models/base/Guofeng3_v34
+    cfg: configs/v1-inference.yaml
+    varient: fp32
+  majicmixRealistic_betterV2V25:
+    path: models/base/majicmixRealistic_betterV2V25.safetensors
     cfg: configs/v1-inference.yaml
     varient: fp32
   SD1.5:
@@ -71,7 +79,37 @@ lora:
     keywords: ""
     base: others
     url: https://civitai.com/models/9434/lora-chinese-doll-likeness
-
+  sexy_Hanfu_91:
+    path: models/lora/sexy Hanfu (91).safetensors
+    keywords: "see-through,chiffon,hair ornament,dress,looking at viewer,chinese clothes,panties,underwear"
+    base: SD1.5
+    url: https://civitai.com/models/134579?modelVersionId=154655
+    comment: weight 0.8-1.0
+  96_xiu:
+    path: models/lora/96_xiu.safetensors
+    keywords: "panties,underwear,see-through,sitting,skirt,pink panties,covered nipples,meadow"
+    base: SD1.5
+    url: https://civitai.com/models/134579?modelVersionId=163075
+    comment: sexy-hanfu weight 0.8-1.0
+  Chinese_trendy_underwear:
+    path: models/lora/Chinese trendy underwear(88).safetensors
+    keywords: "see-through,underwear,anal beads,cleavage,babydoll"
+    base: SD1.5
+    url: https://civitai.com/models/134579?modelVersionId=153558
+    comment: sexy-hanfu weight 0.8-1.0
+  lo_dress_classic_style4_v1:
+    url: https://civitai.com/models/65283/realistic-modern-victorian-fashion-dress-or-or-vol1
+    keywords: lo dress, layered dress, long dress, lace-trimmed dress, frills, puffy sleeves, wide sleeves, bow, jewelry, long sleeves, hat
+    comment: 训练素材采用真实系图片训练，模型在动漫模型中出图可能效果不佳,您可以先尝试0.7。如果感觉有污染到其他元素请酌情降低权重。不建议超过0.85
+    path: models/lora/lo_dress_classic_style4_v1.safetensors
+  GoodHands-beta2:
+    url: https://huggingface.co/jlsim/GoodHands-beta2/tree/main
+    keywords: ""
+    path: models/lora/GoodHands-beta2.safetensors
 vae:
   vae-ft-mse-840000-ema-pruned:
     path: models/vae/vae-ft-mse-840000-ema-pruned.ckpt
+
+samplers: [ "DDIM", "DDPM", "DPM++ 2M", "DPM++ 2M SDE", "DPM++ 2M SDE Karras",
+            "DPM++ SDE", "DPM++ SDE Karras", "DPM2", "DPM2 a", "DPM2 Karras",
+            "DPM2 a Karras", "Euler", "Euler a", "heun", "lms", "lms Karras" ]

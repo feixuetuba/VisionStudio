@@ -1,10 +1,13 @@
+import datetime
 import logging
 import os
 import re
+import time
 
 import PySide6
 from PIL import Image
 import yaml
+from PIL.PngImagePlugin import PngInfo
 from PySide6.QtWidgets import QDialogButtonBox
 from mmengine.model import revert_sync_batchnorm
 
@@ -17,13 +20,16 @@ from utils.qtuitools import list_commbo
 
 
 class Diffusion:
-    def __init__(self, config_file=None):
+    def __init__(self, config_file=None, **kwargs):
+        self.load_config(config_file)
+        self.__latest_generate_data = ""
+    def load_config(self, config_file):
         my_dir = os.path.dirname(os.path.abspath(__file__))
         if config_file is None:
             config_file = f"{my_dir}/diffusion.yaml"
         self.cfg_file = config_file
-        with open(config_file, "r") as fd:
-            cfg = yaml.safe_load(fd)
+        with open(config_file, "r", encoding="utf-8") as fd:
+            cfg = yaml.load(fd, Loader=yaml.FullLoader)
             self.cfg = Config(cfg)
         if "base" not in self.cfg:
             self.cfg["base"] = {}
@@ -31,14 +37,13 @@ class Diffusion:
             for k, v in self.cfg.base.items():
                 v["path"] = self.abspath(v["path"])
                 if "cfg" in v:
-                    v[cfg] = self.abspath(v["cfg"])
+                    v["cfg"] = self.abspath(v["cfg"])
 
         if "lora" not in self.cfg:
             self.cfg["lora"] = {}
         else:
             for k, v in self.cfg.lora.items():
                 v["path"] = self.abspath(v["path"])
-            print(self.cfg.lora)
         if "TI" not in self.cfg:
             self.cfg["TI"] = {}
         else:
@@ -81,34 +86,48 @@ class Diffusion:
         model_id = minfo['path']
         self.pipeline = load_pipeline(model_id, False, minfo.get("varitent", "fp32"), original_config_file=minfo.get("cfg",None))
 
+        self.__latest_generate_data = info["generate_data"]
         return  run_from_generate_data(self.pipeline, info["generate_data"],
             loras = self.cfg.lora,
             vaes = self.cfg.vae,
             n_generate=n_generate)
+
+    def latest_generate_data(self):
+        return self.__latest_generate_data
+
+
+def update_commbo(commbo:QtWidgets.QComboBox, names):
+    curr = commbo.currentText()
+    for i in range(commbo.count(), -1, -1):
+        commbo.removeItem(i)
+    commbo.addItems(names)
+    if curr in names:
+        idx = names.index(curr)
+        commbo.setCurrentIndex(idx)
 
 
 class SDDialog(QtWidgets.QDialog):
     def __init__(self, context=None, parent=None):
         super().__init__(parent=parent)
         self.setWindowTitle("StableDiffusion")
-        # layers = [""]
-        # layers.extend(context.win.canvas.layer_names())
         layout = QtWidgets.QFormLayout()
-        # self.layers_comb = QtWidgets.QComboBox(self)
-        # self.layers_comb.addItems(layers)
-        # layout.addRow("layers",self.layers_comb)
-        # if len(layers) >= 2:
-        #     self.layers_comb.setCurrentIndex(1)
-        self.diffusion = Diffusion()
+        if context is None:
+            self.diffusion = Diffusion()
+            self.win = None
+        else:
+            self.diffusion = context.win.stableDiffusion
+            self.win = context.win
         self.setLayout(layout)
         h_layout = QtWidgets.QHBoxLayout()
         h_layout.addWidget(QtWidgets.QLabel("基模"))
         self.base = QtWidgets.QComboBox(parent=self)
-        self.base.addItems(list(self.diffusion.cfg.base.keys()))
         h_layout.addWidget(self.base)
-        self.load_btn = QtWidgets.QPushButton("加载配置")
+        self.load_btn = QtWidgets.QPushButton("载入数据")
         self.load_btn.clicked.connect(self.open_file)
         h_layout.addWidget(self.load_btn)
+        self.refresh_btn = QtWidgets.QPushButton("刷新配置")
+        self.refresh_btn.clicked.connect(self.refresh_config)
+        h_layout.addWidget(self.refresh_btn)
         layout.addRow(h_layout)
 
         self.prompt = QtWidgets.QTextEdit(parent=self)
@@ -141,16 +160,9 @@ class SDDialog(QtWidgets.QDialog):
         h_layout.addWidget(self.seed)
         layout.addRow(h_layout)
 
-        samplers = ["DDPM", "DPM++ 2M", "DPM++ 2M SDE", "DPM++ 2M SDE Karras",
-                    "DPM++ SDE", "DPM++ SDE Karras",
-                    "DPM2", "DPM2 a", "DPM2 Karras", "DPM2 a Karras",
-                    "Euler", "Euler a",
-                    "heun", "lms", "lms Karras"
-                    ]
         h_layout = QtWidgets.QHBoxLayout()
         h_layout.addWidget(QtWidgets.QLabel("Sampler:"))
         self.sampler = QtWidgets.QComboBox(parent=self)
-        self.sampler.addItems(samplers)
         h_layout.addWidget(self.sampler)
         h_layout.addWidget(QtWidgets.QLabel("Denoising strength:"))
         self.denoise_strength = QtWidgets.QLineEdit(parent=self)
@@ -162,15 +174,10 @@ class SDDialog(QtWidgets.QDialog):
         h_layout = QtWidgets.QHBoxLayout()
         h_layout.addWidget(QtWidgets.QLabel("VAE"))
         self.vae = QtWidgets.QComboBox(parent=self)
-        vaes = [""]
-        vaes.extend(list(self.diffusion.cfg.vae.keys()))
-        self.vae.addItems(vaes)
+
         h_layout.addWidget(self.vae)
         h_layout.addWidget(QtWidgets.QLabel("Texture inversion"))
         self.TI = QtWidgets.QComboBox(parent=self)
-        tis = [""]
-        tis.extend(list(self.diffusion.cfg.TI.keys()))
-        self.TI.addItems(tis)
         h_layout.addWidget(self.TI)
         layout.addRow(h_layout)
 
@@ -213,12 +220,47 @@ class SDDialog(QtWidgets.QDialog):
         self.layout().addWidget(self.buttonBox)
 
         self.generate_data = ""
+        self.update_ui()
+        gd = self.diffusion.latest_generate_data()
+        if len(gd) != 0:
+            self.load_generate_data(gd, raw=True)
+
+    def refresh_config(self):
+        self.diffusion.load_config(None)
+        self.update_ui()
+
+    def update_ui(self):
+        # self.sampler.addItems(self.diffusion.cfg.samplers)
+        update_commbo(self.sampler, self.diffusion.cfg.samplers)
+        vaes = [""]
+        vaes.extend(list(self.diffusion.cfg.vae.keys()))
+        update_commbo(self.vae, vaes)
+
+        tis = [""]
+        tis.extend(list(self.diffusion.cfg.TI.keys()))
+        update_commbo(self.TI, tis)
+
+        update_commbo(self.base, list(self.diffusion.cfg.base.keys()))
+        loras = [""]
+        loras.extend(list(self.diffusion.cfg.lora.keys()))
+        for i in range(self.max_loras):
+            update_commbo(self.lora_widgets[i][0], loras)
+
 
     def accept(self) -> None:
         info = self.build_generate_data()
         ng = int(self.n_generate.text().strip())
+        t = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S.png")
         for i, image in enumerate(self.diffusion.generate(info, ng)):
-            image.save(f"{i}.png")
+            meta = PngInfo()
+            meta.add_text(key="generate_data", value=self.generate_data)
+            if self.win is None:
+                image.save(f"results/{t}", pnginfo=meta)
+            else:
+                self.win.canvas.add_layer(image, layerName=f"diffusion_seg", layerType="sd",
+                                          generate_data=self.generate_data
+                                             )
+        print("Done")
 
     def build_generate_data(self):
         model = self.base.currentText().strip()
@@ -266,19 +308,24 @@ class SDDialog(QtWidgets.QDialog):
         fpath = file[0]
         self.load_generate_data(fpath)
 
-    def load_generate_data(self, fpath):
+    def load_generate_data(self, fpath, raw=False):
         """
         加载civitai的generate data
         :return:
         """
 
-        if fpath.endswith(".png"):
-            image = Image.open(fpath)
-            if hasattr("generate_data"):
-                lines = image.generate_data.split("\n")
+        if raw:
+            lines = raw.split("\n")
         else:
-            with open(fpath) as fd:
-                lines = fd.readlines()
+            if fpath.endswith(".png"):
+                image = Image.open(fpath)
+                if "generate_data" in image.text:
+                    lines = image.text["generate_data"].split("\n")
+                else:
+                    return False
+            else:
+                with open(fpath) as fd:
+                    lines = fd.readlines()
 
         pattern = re.compile("<lora:([\w|_]*:\d+\.*\d*)>")
         prompt = lines[0].strip()
@@ -286,7 +333,7 @@ class SDDialog(QtWidgets.QDialog):
         prompt = pattern.sub("", prompt)
         self.prompt.setText(prompt)
         self.nprompt.setText(lines[1].strip())
-        self.params = lines[2].strip()
+        self.params = lines[2].strip().replace("Negative prompt: ", "")
 
         if len(self.lora_widgets) > 0:
             commbo = self.lora_widgets[0][0]
@@ -348,16 +395,15 @@ class SDDialog(QtWidgets.QDialog):
 
 def Init(context, **kwargs):
     win = context.win
-    obj = MMSegments(**kwargs)
-    logging.info(f"{obj.get_methods()} Load")
-    setattr(win, "mmsegs", obj)
+    obj = Diffusion(**kwargs)
+    setattr(win, "stableDiffusion", obj)
 
 
 
-def do_seg(context):
+def show(context):
     state = context.state
     rect = context.win.rect()
-    c = SegDialog(context, parent=context.win)
+    c = SDDialog(context, parent=context.win)
     cx = rect.x() + rect.width() // 2
     cy = rect.y() + rect.height() // 2
     x = max(cx-150, 0)
@@ -365,31 +411,8 @@ def do_seg(context):
     c.setGeometry(QtCore.QRect(x,y,300,300))
     # c.setWindowModality(Qt.ApplicationModal)
     c.raise_()
-    c.exec()
-    method = c.methods_comb.currentText()
-    layer_name = c.layers_comb.currentText()
-    if layer_name == "":
-        return
-    if method == "":
-        return
-    layer = context.win.canvas.get_layer(layer_name)
-    if layer is None:
-        return
-    mmsegs = context.win.mmsegs
-    mmsegs.use(method)
-    if layer.raw.ndim == 2:
-        img = cv2.cvtColor(layer.raw, cv2.COLOR_GRAY2RGB)
-    elif layer.raw.shape[2] == 3:
-        img = cv2.cvtColor(layer.raw, cv2.COLOR_BGR2RGB)
-    elif layer.raw.shape[2] == 4:
-        img = cv2.cvtColor(layer.raw, cv2.COLOR_BGRAY2RGB)
-    else:
-        state.win.log(f"Invalid layer with channgle:{layer.raw.shape[2]}","ERROR")
-    result = mmsegs.run(img, data_only=True)
-    context.win.canvas.add_layer(result, layerName=f"{layer_name}_seg", layerType="segment",
-                                 cls_names=mmsegs.get_classes(),
-                                 palette=mmsegs.get_palette()
-                                 )
+    c.show()
+
 
 
 
